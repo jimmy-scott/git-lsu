@@ -1,9 +1,9 @@
 #!/usr/bin/perl
 
 ######
-# git-lsu, git-lsd: inspect unreferenced or dangling objects
+# git-lsu, git-lsd: inspect unreachable or dangling objects
 #
-# version: 0.1 created on 16/06/2012 (DD/MM/YYYY)
+# version: 0.2 created on 16/06/2012 (DD/MM/YYYY)
 # source: http://pub.devbox.be
 ###
 #
