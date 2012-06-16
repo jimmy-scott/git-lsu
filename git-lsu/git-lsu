@@ -1,0 +1,272 @@
+#!/usr/bin/perl
+
+######
+# git-lsu, git-lsd: inspect unreferenced or dangling objects
+#
+# version: 0.1 created on 16/06/2012 (DD/MM/YYYY)
+# source: http://pub.devbox.be
+###
+#
+# Copyright (C) 2012 Jimmy Scott #jimmy#inet-solutions#be#. Belgium.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#   1. Redistributions of source code must retain the above copyright notice,
+#      this list of conditions and the following disclaimer.
+#
+#   2. Redistributions in binary form must reproduce the above copyright
+#      notice, this list of conditions and the following disclaimer in the
+#      documentation and/or other materials provided with the distribution.
+#
+#   3. The names of the authors may not be used to endorse or promote products
+#      derived from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS "AS IS" AND ANY
+# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+# THE POSSIBILITY OF SUCH DAMAGE.
+#
+######
+
+use strict;
+use warnings;
+
+use Getopt::Long qw(:config pass_through);
+
+# Command in use
+my $command;
+
+# Mode it is executed in
+my $dangle = 0;
+
+# Command 'commit' options
+my $c_nonewlines = '';	# Remove newlines between output
+my $c_showtree = '';	# List tree for every commit
+my $c_dumptree = '';	# Dump tree for every commit
+
+# Options to pass to git
+my @gitopts = ();
+
+# This structure is mostly for future use to support analyze mode
+my %objects = ( 'commit' => {}, 'tree' => {}, 'blob' => {} );
+
+
+sub usage {
+	print STDERR
+		"usage: $0 [list]\n",
+		"       $0 commit [opts] [git-show opts]\n",
+		"       $0 tree [git-ls-tree opts]\n",
+		"       $0 blob\n";
+	exit(1);
+}
+
+sub main {
+	# Check in which mode we execute
+	$dangle = 1 if ($0 =~ /lsd/);
+	
+	parse_args();
+	
+	my $items = get_objects();
+	exit(0) if ($items == 0);
+	
+	if ($command eq 'list') {
+		list_objects();
+	} elsif ($command eq 'commit') {
+		show_commits();
+	} elsif ($command eq 'tree') {
+		show_trees();
+	} elsif ($command eq 'blob') {
+		show_blobs();
+	} else {
+		usage();
+	}
+}
+
+sub parse_args {
+	$command = shift @ARGV || 'list';
+	
+	my $optok;
+	my %options;
+	
+	if ($command eq 'commit') {
+		%options = (
+			'no-newlines'	=>	\$c_nonewlines,
+			'show-tree'	=>	\$c_showtree,
+			'dump-tree'	=>	\$c_dumptree,
+		);
+	#} elsif ($command eq 'tree') {
+	#} elsif ($command eq 'blob') {
+	#} else {
+	}
+
+	$optok = GetOptions (%options);
+	usage() unless ($optok);
+	@gitopts = @ARGV;
+}
+
+sub get_objects {
+	my $filter = shift;
+	my $items = 0;
+
+	my $cmd = "git fsck";
+	$cmd .= " --unreachable" unless ($dangle);
+	
+	# Get unreachable or dangling objects
+	# Expected format: <state> <type> <sha1>
+	my $fsck = `$cmd`;
+	
+	# Structure will look like this:
+	# %objects -> %type -> %sha1 -> %prop = 'value'
+	for my $line (split /\n/, $fsck) {
+		if ($line =~ /^(unreachable|dangling)\s+(commit|blob|tree)\s+([a-f0-9]+)$/) {
+			my $type = $2; my $sha = $3;
+			next if (defined $filter && $type ne $filter);
+			$objects{$type}{$sha} = {};
+			$items++;
+		} else {
+			# Enexpected format
+			print STDERR "$0: unknown format: `$line'\n";
+		}
+	}
+	
+	# Return the number of items
+	return $items;
+}
+
+sub list_objects {
+	my $sha;
+	
+	my $mode = $dangle ? "dangling" : "unreachable";
+	
+	for $sha (keys %{$objects{'commit'}}) {
+		print "$mode commit $sha\n";
+	}
+	
+	for $sha (keys %{$objects{'tree'}}) {
+		print "$mode tree $sha\n";
+	}
+	
+	for $sha (keys %{$objects{'blob'}}) {
+		print "$mode blob $sha\n";
+	}
+}
+
+sub show_commits {
+	my %tss = ();
+	my @stss = ();
+	my @ssha = ();
+	
+	# Get timestamp and subject into temp structure
+	for my $sha (keys %{$objects{'commit'}}) {
+		my $out = `git show --format='%at%n%s' --quiet $sha`;
+		my ($time, $subject) = split(/\n/, $out);
+		$tss{$time}{$sha} = $subject;
+	}
+	
+	# Get a sorted list of timestamp
+	@stss = sort {$b <=> $a} keys %tss;
+	
+	# Sort objects with same timestamp by subject type
+	for my $ts (@stss) {
+		my (@wip, @ind, @oth);
+		for my $sha (keys %{$tss{$ts}}) {
+			my $subject = $tss{$ts}{$sha};
+			if ($subject =~ /^WIP\son\s\S+:\s/) {
+				push @wip, $sha;
+			} elsif ($subject =~ /^index\son\s\S+:\s/) {
+				push @ind, $sha;
+			} else {
+				push @oth, $sha;
+			}
+		}
+		push @ssha, (@wip, @ind, @oth);
+	}
+	
+	# Print commits
+	for my $sha (@ssha) {
+		my $cmd;
+		
+		if (@gitopts) {
+			$cmd = "git show " . join(' ', @gitopts) . " $sha";
+		} else {
+			$cmd = "git show --quiet $sha";
+		}
+		
+		my $out = `$cmd`;
+		
+		# Add or remove newlines
+		$out =~ s/\n+$/\n/ if ($c_nonewlines);
+		print $out;
+		print "\n" unless ($c_nonewlines || ($out =~ /\n\n$/));
+		
+		# Print c_showtree or c_dumptree
+		if ($c_dumptree) {
+			$out = `git ls-tree -r --full-tree $sha`;
+			print $out, "\n";
+		} elsif ($c_showtree) {
+			$out = `git ls-tree --full-tree $sha`;
+			print $out, "\n";
+		}
+	}
+}
+
+sub show_trees {
+	my $sha;
+	my $cmd = "git ls-tree --full-tree";
+	
+	if (@gitopts) {
+		$cmd .= " " . join(' ', @gitopts);
+	}
+	
+	for $sha (keys %{$objects{'tree'}}) {
+		print "tree ${sha}\n\n";
+		my $out = `$cmd $sha`;
+		print $out, "\n";
+	}
+}
+
+sub show_blobs {
+	my $sha;
+	my $cmd = "git show";
+	
+	# Has no point AFAIK
+	#if (@gitopts) {
+	#	$cmd .= " " . join(' ', @gitopts);
+	#}
+	
+	for $sha (keys %{$objects{'blob'}}) {
+		print "blob ${sha}\n\n";
+		print "[", "=" x 69, ">]", "\n\n";
+		
+		my $out = `$cmd $sha`;
+		
+		# Try not to screwup the terminal
+		if (check_is_binary(\$out)) {
+			print "(binary data: ", length($out), " bytes)\n";
+		} else {
+			print $out;
+		}
+		
+		print "\n", "[<", "=" x 69, "]", "\n\n";
+	}
+}
+
+sub check_is_binary {
+	my $data_ref = shift;
+	
+	my $data = substr($${data_ref}, 0, 8000);
+	return 1 if ($data =~ /\0/); 
+	return 0;
+}
+
+main();
+
