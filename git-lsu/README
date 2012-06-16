@@ -1,0 +1,6 @@
+Inspect unreferenced or dangling objects
+
+git-lsu: show unreferenced objects, but also contains code for git-lsd.
+git-lsd: is a symlink to git-lsu, but will show dangling objects.
+
+Help is still limited, see usage() and parse_args() for details.
