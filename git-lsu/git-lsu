@@ -3,7 +3,7 @@
 ######
 # git-lsu, git-lsd: inspect unreachable or dangling objects
 #
-# version: 0.2 created on 16/06/2012 (DD/MM/YYYY)
+# version: 0.3 created on 16/06/2012 (DD/MM/YYYY)
 # source: http://pub.devbox.be
 ###
 #
@@ -128,7 +128,9 @@ sub get_objects {
 	# %objects -> %type -> %sha1 -> %prop = 'value'
 	for my $line (split /\n/, $fsck) {
 		if ($line =~ /^(unreachable|dangling)\s+(commit|blob|tree)\s+([a-f0-9]+)$/) {
-			my $type = $2; my $sha = $3;
+			my $state = $1; my $type = $2; my $sha = $3;
+			next if ($dangle && $state ne "dangling");
+			next if ((!$dangle) && $state ne "unreachable");
 			next if (defined $filter && $type ne $filter);
 			$objects{$type}{$sha} = {};
 			$items++;
@@ -145,18 +147,18 @@ sub get_objects {
 sub list_objects {
 	my $sha;
 	
-	my $mode = $dangle ? "dangling" : "unreachable";
+	my $state = $dangle ? "dangling" : "unreachable";
 	
 	for $sha (keys %{$objects{'commit'}}) {
-		print "$mode commit $sha\n";
+		print "$state commit $sha\n";
 	}
 	
 	for $sha (keys %{$objects{'tree'}}) {
-		print "$mode tree $sha\n";
+		print "$state tree $sha\n";
 	}
 	
 	for $sha (keys %{$objects{'blob'}}) {
-		print "$mode blob $sha\n";
+		print "$state blob $sha\n";
 	}
 }
 
