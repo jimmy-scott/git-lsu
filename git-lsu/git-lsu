@@ -3,7 +3,7 @@
 ######
 # git-lsu, git-lsd: inspect unreachable or dangling objects
 #
-# version: 0.3 created on 16/06/2012 (DD/MM/YYYY)
+# version: 0.3 created on 17/06/2012 (DD/MM/YYYY)
 # source: http://pub.devbox.be
 ###
 #
@@ -56,6 +56,7 @@ my $dangle = 0;
 # Catchall options
 my $a_help = '';
 my $a_version = '';
+my $a_input_file = '';
 
 # Command 'commit' options
 my $c_nonewlines = '';	# Remove newlines between output
@@ -70,12 +71,24 @@ my %objects = ( 'commit' => {}, 'tree' => {}, 'blob' => {} );
 
 
 sub show_usage {
+	my $spc = " " x length($exe);
 	print STDERR
-		"usage: $exe [--help] [--version]\n",
-		"       $exe [list]\n",
-		"       $exe commit [opts] [git-show opts]\n",
-		"       $exe tree [git-ls-tree opts]\n",
-		"       $exe blob\n";
+	"usage: $exe [--help] [--version]\n",
+	"       $exe [list] [--input-file=<file>]\n",
+	"       $exe commit [--input-file=<file>] [--no-newlines]\n",
+	"       $spc        [--show-tree] [--dump-tree] [git-show options]\n",
+	"       $exe tree [--input-file=<file>] [git-ls-tree options]\n",
+	"       $exe blob [--input-file=<file>]\n\n",
+	"options:\n",
+	"   --input-file=<file>    ",
+		"Read data from file instead of running git fsck\n",
+	"   --no-newlines          ",
+		"Remove newlines between output blocks\n",
+	"   --show-tree            ",
+		"Show the tree of each commit\n",
+	"   --dump-tree            ",
+		"Show the tree of each commit recursively\n",
+	"\n";
 	exit(1);
 }
 
@@ -132,6 +145,7 @@ sub parse_args {
 	%alloptions = (
 		'help'		=>	\$a_help,
 		'version'	=>	\$a_version,
+		'input-file=s'	=>	\$a_input_file,
 	);
 	
 	# Catch these options for individual commands
@@ -157,21 +171,59 @@ sub parse_args {
 	
 	# Try to avoid incorrect usage
 	if (@gitopts) {
+		# Why do I even bother using Getopt if I have to
+		# do crap like this? If the options I provide have
+		# invalid or missing parameters, they shouldn't be
+		# passed on, even for pass_through mode it's stupid.
+		show_usage() if ($gitopts[0] =~ /--input-file=?/);
+		
 		# These options to not support pass_through
 		show_usage() if ($command eq 'list' || $command eq 'blob');
 	}
 }
 
+sub read_file {
+	my $file = shift;
+	my ($fh, $out);
+	
+	if (open($fh, '<', $file)) {
+		local $/;
+		$out = <$fh>;
+	} else {
+		print STDERR "$exe: $file: $!\n";
+		return undef;
+	}
+	
+	close($fh);
+	return $out;
+}
+
 sub get_objects {
 	my $filter = shift;
 	my $items = 0;
-
-	my $cmd = "git fsck";
-	$cmd .= " --unreachable" unless ($dangle);
+	my ($cmd, $fsck);
 	
 	# Get unreachable or dangling objects
 	# Expected format: <state> <type> <sha1>
-	my $fsck = `$cmd`;
+	if ($a_input_file ne '') {
+		# Read from file
+		$fsck = read_file($a_input_file);
+		
+		if (!defined($fsck)) {
+			print STDERR "$exe: failed to read `$a_input_file'.\n";
+			exit(1);
+		}
+	} else {
+		# Read from git command
+		$cmd = "git fsck";
+		$cmd .= " --unreachable" unless ($dangle);
+		$fsck = `$cmd`;
+		
+		if (!defined($fsck)) {
+			print STDERR "$exe: fialed to execute `$cmd'.\n";
+			exit(1);
+		}
+	}
 	
 	# Structure will look like this:
 	# %objects -> %type -> %sha1 -> %prop = 'value'
