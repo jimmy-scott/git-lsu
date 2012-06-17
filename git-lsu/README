@@ -19,8 +19,8 @@ Start by looking at the usage:
 	$ git-lsu show
 
 To list unreachable objects:
-	$ git-lsu list > list-unrachable.out
-	$ cat list-unrachable
+	$ git-lsu list > list-unreachable.out
+	$ cat list-unreachable
 
 To list dangling objects:
 	$ git-lsd list > list-dangling.out
@@ -28,7 +28,7 @@ To list dangling objects:
 
 Only the list command can pass additional parameters to git-fsck.
 So if you still cannot find the object later, try using --no-reflog:
-	$ git-lsu list --no-reflog > list-unrachable-noref.out
+	$ git-lsu list --no-reflog > list-unreachable-noref.out
 	$ git-lsd list --no-reflog > list-dangling-noref.out
 
 In the next examples we are going to deal with unreachable objects
@@ -36,27 +36,27 @@ only. If you want to inspect dangling objects, use 'git-lsd' and the
 list-dangling.out input file we created earlier.
 
 List unreachable commit messages from new to old:
-	$ git-lsu commit --input-file=list-unrachable.out
+	$ git-lsu commit --input-file=list-unreachable.out
 
 You can pass options to git-show by doing stuff like this:
-	$ git-lsu commit --input-file=list-unrachable.out --stat
-	$ git-lsu commit --input-file=list-unrachable.out \
+	$ git-lsu commit --input-file=list-unreachable.out --stat
+	$ git-lsu commit --input-file=list-unreachable.out \
 		--no-newlines --quiet --oneline
 
 You can display the tree object associated to each commit:
-	$ git-lsu commit --input-file=list-unrachable.out --show-tree
+	$ git-lsu commit --input-file=list-unreachable.out --show-tree
 
 You can display the complete tree associated to each commit:
-	$ git-lsu commit --input-file=list-unrachable.out --dump-tree
+	$ git-lsu commit --input-file=list-unreachable.out --dump-tree
 
 List unreachable tree objects:
-	$ git-lsu tree --input-file=list-unrachable.out
+	$ git-lsu tree --input-file=list-unreachable.out
 
 You can pass options to git-ls-tree by doing stuff like this:
-	$ git-lsu tree --input-file=list-unrachable.out -r --abbrev
+	$ git-lsu tree --input-file=list-unreachable.out -r --abbrev
 
 List unreachable blob objects:
-	$ git-lsu blob --input-file=list-unrachable.out
+	$ git-lsu blob --input-file=list-unreachable.out
 
 Binary files will be displayed like this:
 	(binary data: 9252 bytes)
