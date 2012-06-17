@@ -40,7 +40,8 @@
 use strict;
 use warnings;
 
-use Getopt::Long qw(:config pass_through);
+use Getopt::Long qw(:config pass_through require_order
+	no_ignore_case no_auto_abbrev prefix_pattern=(--));
 
 # Version string
 my $version = "git-lsu version 0.3";
@@ -110,7 +111,7 @@ sub main {
 
 sub parse_args {
 	# If first arg is option, run as 'list' command
-	if (@ARGV && ($ARGV[0] =~ /^\-/)) {
+	if (@ARGV && ($ARGV[0] =~ /^\-\-/)) {
 		$command = 'list';
 	} else {
 		$command = shift @ARGV || 'list';
@@ -119,12 +120,17 @@ sub parse_args {
 	my $optok;
 	my %options;
 	my %alloptions;
-
+	
+	# List of all supported commands
+	my @commands = ('list', 'commit', 'tree', 'blob');
+	
+	# Catch these options for all commands
 	%alloptions = (
 		'help'		=>	\$a_help,
 		'version'	=>	\$a_version,
 	);
 	
+	# Catch these options for individual commands
 	if ($command eq 'commit') {
 		%options = (
 			'no-newlines'	=>	\$c_nonewlines,
@@ -135,11 +141,21 @@ sub parse_args {
 	#} elsif ($command eq 'blob') {
 	#} else {
 	}
-
-	$optok = GetOptions (%options, %alloptions);
+	
+	# Verify we are running a known command
+	show_usage() unless (grep(/^${command}$/, @commands));
+	
+	# Parse options, return help or version immediately
+	$optok = GetOptions ((%options, %alloptions));
 	show_usage() if ((!$optok) || $a_help);
 	show_version() if ($a_version);
 	@gitopts = @ARGV;
+	
+	# Try to avoid incorrect usage
+	if (@gitopts) {
+		# These options to not support pass_through
+		show_usage() if ($command eq 'list' || $command eq 'blob');
+	}
 }
 
 sub get_objects {
