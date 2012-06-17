@@ -42,11 +42,19 @@ use warnings;
 
 use Getopt::Long qw(:config pass_through);
 
-# Command in use
+# Version string
+my $version = "git-lsu version 0.3";
+
+# Command and exec name in use
+my $exe;
 my $command;
 
 # Mode it is executed in
 my $dangle = 0;
+
+# Catchall options
+my $a_help = '';
+my $a_version = '';
 
 # Command 'commit' options
 my $c_nonewlines = '';	# Remove newlines between output
@@ -60,18 +68,27 @@ my @gitopts = ();
 my %objects = ( 'commit' => {}, 'tree' => {}, 'blob' => {} );
 
 
-sub usage {
+sub show_usage {
 	print STDERR
-		"usage: $0 [list]\n",
-		"       $0 commit [opts] [git-show opts]\n",
-		"       $0 tree [git-ls-tree opts]\n",
-		"       $0 blob\n";
+		"usage: $exe [--help] [--version]\n",
+		"       $exe [list]\n",
+		"       $exe commit [opts] [git-show opts]\n",
+		"       $exe tree [git-ls-tree opts]\n",
+		"       $exe blob\n";
 	exit(1);
 }
 
+sub show_version {
+	print $version, "\n";
+	exit(0);
+}
+
 sub main {
+	$exe = $0;
+	$exe =~ s/.+[\/]//;
+	
 	# Check in which mode we execute
-	$dangle = 1 if ($0 =~ /lsd/);
+	$dangle = 1 if ($exe =~ /lsd/);
 	
 	parse_args();
 	
@@ -87,15 +104,26 @@ sub main {
 	} elsif ($command eq 'blob') {
 		show_blobs();
 	} else {
-		usage();
+		show_usage();
 	}
 }
 
 sub parse_args {
-	$command = shift @ARGV || 'list';
+	# If first arg is option, run as 'list' command
+	if (@ARGV && ($ARGV[0] =~ /^\-/)) {
+		$command = 'list';
+	} else {
+		$command = shift @ARGV || 'list';
+	}
 	
 	my $optok;
 	my %options;
+	my %alloptions;
+
+	%alloptions = (
+		'help'		=>	\$a_help,
+		'version'	=>	\$a_version,
+	);
 	
 	if ($command eq 'commit') {
 		%options = (
@@ -108,8 +136,9 @@ sub parse_args {
 	#} else {
 	}
 
-	$optok = GetOptions (%options);
-	usage() unless ($optok);
+	$optok = GetOptions (%options, %alloptions);
+	show_usage() if ((!$optok) || $a_help);
+	show_version() if ($a_version);
 	@gitopts = @ARGV;
 }
 
@@ -136,7 +165,7 @@ sub get_objects {
 			$items++;
 		} else {
 			# Enexpected format
-			print STDERR "$0: unknown format: `$line'\n";
+			print STDERR "$exe: unknown format: `$line'\n";
 		}
 	}
 	
