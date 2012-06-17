@@ -56,6 +56,9 @@ List unreachable blob objects:
 Binary files will be displayed like this:
 	(binary data: 9252 bytes)
 
+To restore a file:
+	$ git show <SHA1> > file
+
 
 Some boring background about the tool and when to use it
 --------------------------------------------------------
