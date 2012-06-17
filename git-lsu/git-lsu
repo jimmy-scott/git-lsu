@@ -91,11 +91,14 @@ sub main {
 	# Check in which mode we execute
 	$dangle = 1 if ($exe =~ /lsd/);
 	
+	# Parse & check args
 	parse_args();
 	
+	# Args look fine, so get items
 	my $items = get_objects();
 	exit(0) if ($items == 0);
 	
+	# Run requested command
 	if ($command eq 'list') {
 		list_objects();
 	} elsif ($command eq 'commit') {
@@ -105,6 +108,7 @@ sub main {
 	} elsif ($command eq 'blob') {
 		show_blobs();
 	} else {
+		# Never reached
 		show_usage();
 	}
 }
