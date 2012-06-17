@@ -1,6 +1,103 @@
-Inspect unreachable or dangling objects
+git-lsu & git-lsd: Inspect unreachable or dangling objects
+----------------------------------------------------------
 
 git-lsu: shows unreachable objects, but also contains code for git-lsd.
 git-lsd: is a symlink to git-lsu, but will shows dangling objects.
 
-Help is still limited, see usage() and parse_args() for details.
+
+How to use the tool (if you are bored, read the background below)
+-----------------------------------------------------------------
+
+This tool is basically a wrapper and looper around following commands:
+	git-fsck, git-ls-tree, git-show
+
+For small projects, you can get away using the tool without using the
+--input-file=<file> parameter, but I recommend using it, so the examples
+below will be shown by using an input file.
+
+Start by looking at the usage:
+	$ git-lsu show
+
+To list unreachable objects:
+	$ git-lsu list > list-unrachable.out
+	$ cat list-unrachable
+
+To list dangling objects:
+	$ git-lsd list > list-dangling.out
+	$ cat list-dangling
+
+In the next examples we are going to deal with unreachable objects
+only. If you want to inspect dangling objects, use 'git-lsd' and the
+list-dangling.out input file we created earlier.
+
+List unreachable commit messages from new to old:
+	$ git-lsu commit --input-file=list-unrachable.out
+
+You can pass options to git-show by doing stuff like this:
+	$ git-lsu commit --input-file=list-unrachable.out --stat
+	$ git-lsu commit --input-file=list-unrachable.out \
+		--no-newlines --quiet --oneline
+
+You can display the tree object associated to each commit:
+	$ git-lsu commit --input-file=list-unrachable.out --show-tree
+
+You can display the complete tree associated to each commit:
+	$ git-lsu commit --input-file=list-unrachable.out --dump-tree
+
+List unreachable tree objects:
+	$ git-lsu tree --input-file=list-unrachable.out
+
+You can pass options to git-ls-tree by doing stuff like this:
+	$ git-lsu tree --input-file=list-unrachable.out -r --abbrev
+
+List unreachable blob objects:
+	$ git-lsu blob --input-file=list-unrachable.out
+
+Binary files will be displayed like this:
+	(binary data: 9252 bytes)
+
+
+Some boring background about the tool and when to use it
+--------------------------------------------------------
+
+This tool is designed to help you in case you did something really
+stupid while using the git add, stash, rebase, reset, checkout and
+maybe, probably, some others commands.
+
+If you were lucky, you performed a 'git add' of the file before you
+managed to cripple your file. If this was the case, your file is still
+available from the index, and you can still retrieve it by running:
+
+	$ git checkout-index <file>
+
+But a lot can go wrong, let's name a few examples:
+
+(1) You add something to the index, make few changes, test your
+changes, think it's ok, add the changes to the index, and then discover
+you managed to cripple your file before adding a second time to the
+index.
+
+(2) You were working on something, stashed your changes, switched to
+something else, stashed some other changes, and in the process, you
+accidentally dropped the wrong stash, maybe even cleared the whole
+stash.
+
+(3) You ran the wrong reset/rebase command and completely screwed your
+history .. well, you probably deserved it in this case :-)
+
+The good news is: as soon as git touched that version, either by adding
+it to the index, stashing it, committing it, or whatever; git still
+knows about it (as long as you didn't fool around with repacking and
+purging objects in the meantime).
+
+This is where 'git fsck' comes in. You can try using:
+
+	$ git fsck --lost-found
+
+But it doesn't (yet?) work with additional options, so it doesn't always
+restore the objects you lost. And if you have a lot of similar files,
+you'll need to find the commit and tree object it belonged to first.
+
+It's possible to find something, just a bit too cumbersome.
+So if you ever tried this: this script might save you a lot of time.
+
