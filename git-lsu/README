@@ -26,6 +26,11 @@ To list dangling objects:
 	$ git-lsd list > list-dangling.out
 	$ cat list-dangling
 
+Only the list command can pass additional parameters to git-fsck.
+So if you still cannot find the object later, try using --no-reflog:
+	$ git-lsu list --no-reflog > list-unrachable-noref.out
+	$ git-lsd list --no-reflog > list-dangling-noref.out
+
 In the next examples we are going to deal with unreachable objects
 only. If you want to inspect dangling objects, use 'git-lsd' and the
 list-dangling.out input file we created earlier.

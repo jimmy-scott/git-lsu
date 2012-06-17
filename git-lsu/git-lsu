@@ -74,7 +74,7 @@ sub show_usage {
 	my $spc = " " x length($exe);
 	print STDERR
 	"usage: $exe [--help] [--version]\n",
-	"       $exe [list] [--input-file=<file>]\n",
+	"       $exe [list] [--input-file=<file>] [git-fsck options]\n",
 	"       $exe commit [--input-file=<file>] [--no-newlines]\n",
 	"       $spc        [--show-tree] [--dump-tree] [git-show options]\n",
 	"       $exe tree [--input-file=<file>] [git-ls-tree options]\n",
@@ -178,7 +178,7 @@ sub parse_args {
 		show_usage() if ($gitopts[0] =~ /--input-file=?/);
 		
 		# These options to not support pass_through
-		show_usage() if ($command eq 'list' || $command eq 'blob');
+		show_usage() if ($command eq 'blob');
 	}
 }
 
@@ -217,6 +217,12 @@ sub get_objects {
 		# Read from git command
 		$cmd = "git fsck";
 		$cmd .= " --unreachable" unless ($dangle);
+		
+		# List command may pass arguments to fsck
+		if ($command eq 'list' && @gitopts) {
+			$cmd .= " " . join(" ", @gitopts);
+		}
+		
 		$fsck = `$cmd`;
 		
 		if (!defined($fsck)) {
