@@ -3,7 +3,7 @@
 ######
 # git-lsu, git-lsd: inspect unreachable or dangling objects
 #
-# version: 0.3 created on 17/06/2012 (DD/MM/YYYY)
+# version: 0.4 created on 18/06/2012 (DD/MM/YYYY)
 # source: http://pub.devbox.be
 ###
 #
@@ -44,7 +44,7 @@ use Getopt::Long qw(:config pass_through require_order
 	no_ignore_case no_auto_abbrev prefix_pattern=(--));
 
 # Version string
-my $version = "git-lsu version 0.3";
+my $version = "git-lsu version 0.4";
 
 # Command and exec name in use
 my $exe;
@@ -63,6 +63,13 @@ my $c_nonewlines = '';	# Remove newlines between output
 my $c_showtree = '';	# List tree for every commit
 my $c_dumptree = '';	# Dump tree for every commit
 
+# Command 'dump' options
+my $d_commit = '';
+my $d_tree = '';
+my $d_blob = '';
+my $d_force = '';
+my $d_folder = '';
+
 # Options to pass to git
 my @gitopts = ();
 
@@ -75,13 +82,28 @@ sub show_usage {
 	print STDERR
 	"usage: $exe [--help] [--version]\n",
 	"       $exe [list] [--input-file=<file>] [git-fsck options]\n",
+	"       $exe dump [--input-file=<file>] [--commit] [--tree] [--blob]\n",
+	"       $spc      [--force] <folder>\n",
 	"       $exe commit [--input-file=<file>] [--no-newlines]\n",
 	"       $spc        [--show-tree] [--dump-tree] [git-show options]\n",
 	"       $exe tree [--input-file=<file>] [git-ls-tree options]\n",
-	"       $exe blob [--input-file=<file>]\n\n",
+	"       $exe blob [--input-file=<file>]\n",
+	"\n",
 	"options:\n",
 	"   --input-file=<file>    ",
 		"Read data from file instead of running git fsck\n",
+	"\n",
+	"dump options:\n",
+	"   --commit               ",
+		"Dump commit objects (instead of everything)\n",
+	"   --tree                 ",
+		"Dump tree objects (instead of everything)\n",
+	"   --blob                 ",
+		"Dump blob objects (instead of everything\n",
+	"   --force                ",
+		"Force using the supplied folder name\n",
+	"\n",
+	"commit options:\n",
 	"   --no-newlines          ",
 		"Remove newlines between output blocks\n",
 	"   --show-tree            ",
@@ -120,6 +142,8 @@ sub main {
 		show_trees();
 	} elsif ($command eq 'blob') {
 		show_blobs();
+	} elsif ($command eq 'dump') {
+		dump_objects();
 	} else {
 		# Never reached
 		show_usage();
@@ -139,7 +163,7 @@ sub parse_args {
 	my %alloptions;
 	
 	# List of all supported commands
-	my @commands = ('list', 'commit', 'tree', 'blob');
+	my @commands = ('list', 'commit', 'tree', 'blob', 'dump');
 	
 	# Catch these options for all commands
 	%alloptions = (
@@ -155,6 +179,13 @@ sub parse_args {
 			'show-tree'	=>	\$c_showtree,
 			'dump-tree'	=>	\$c_dumptree,
 		);
+	} elsif ($command eq 'dump') {
+		%options = (
+			'commit'	=>	\$d_commit,
+			'tree'		=>	\$d_tree,
+			'blob'		=>	\$d_blob,
+			'force'		=>	\$d_force,
+		);
 	#} elsif ($command eq 'tree') {
 	#} elsif ($command eq 'blob') {
 	#} else {
@@ -165,11 +196,17 @@ sub parse_args {
 	
 	# Parse options, return help or version immediately
 	$optok = GetOptions ((%options, %alloptions));
+	
+	# Check for help, version, or incorrect usage
 	show_usage() if ((!$optok) || $a_help);
+	show_usage() if ($command eq 'dump' && (!@ARGV));
 	show_version() if ($a_version);
+	
+	# Assign remaining arguments
+	$d_folder = pop @ARGV  if ($command eq 'dump');
 	@gitopts = @ARGV;
 	
-	# Try to avoid incorrect usage
+	# Check pass_through options
 	if (@gitopts) {
 		# Why do I even bother using Getopt if I have to
 		# do crap like this? If the options I provide have
@@ -179,6 +216,7 @@ sub parse_args {
 		
 		# These options to not support pass_through
 		show_usage() if ($command eq 'blob');
+		show_usage() if ($command eq 'dump');
 	}
 }
 
@@ -190,12 +228,32 @@ sub read_file {
 		local $/;
 		$out = <$fh>;
 	} else {
-		print STDERR "$exe: $file: $!\n";
+		print STDERR "$exe: $file: open failed: $!\n";
 		return undef;
 	}
 	
 	close($fh);
 	return $out;
+}
+
+sub write_file {
+	my $file = shift;
+	my $data_ref = shift;
+	my $fh;
+	
+	if (open($fh, '>', $file)) {
+		my $ret = print $fh $${data_ref};
+		unless ($ret) {
+			print STDERR "$exe: $file: write failed: $!\n";
+			return undef;
+		}
+	} else {
+		print STDERR "$exe: $file: open failed: $!\n";
+		return undef;
+	}
+	
+	close($fh);
+	return 1;
 }
 
 sub get_objects {
@@ -375,6 +433,86 @@ sub check_is_binary {
 	my $data = substr($${data_ref}, 0, 8000);
 	return 1 if ($data =~ /\0/); 
 	return 0;
+}
+
+sub create_dump_folders {
+	my @folders;
+	
+	# Abort if the file/folder exists and no --force used
+	if ((-e $d_folder) && (!$d_force)) {
+		print STDERR "$exe: $d_folder: file exists, ",
+		"use --force to use this folder anyway.\n";
+		exit(1);
+	}
+	
+	# Build a list of folders to check/create
+	push @folders, $d_folder;
+	push @folders, $d_folder . '/commit' if ($d_commit);
+	push @folders, $d_folder . '/tree' if ($d_tree);
+	push @folders, $d_folder . '/blob' if ($d_blob);
+	
+	# Check and create each folder
+	for my $folder (@folders) {
+		if (-e $folder) {
+			# File exists, check if folder, check perms
+			if (!-d $folder) {
+				print STDERR "$exe: $folder: ",
+				"not a regular directory.\n";
+				exit(1);
+			} elsif (!-w $folder) {
+				print STDERR "$exe: $folder: ",
+				"directory not writable.\n";
+				exit(1);
+			} elsif (!-x $folder) {
+				print STDERR "$exe: $folder: ",
+				"directory not executable.\n";
+				exit(1);
+			}
+		} else {
+			# Create folder
+			unless(mkdir $folder) {
+				print STDERR "$exe: $folder: ",
+				"mkdir failed: $!\n";
+				exit(1);
+			}
+		}
+	}
+}
+
+sub dump_objects {
+	# Dump all if no type was specified
+	unless ($d_commit || $d_tree || $d_blob) {
+		$d_commit = $d_tree = $d_blob = 1;
+	}
+	
+	# Dump commands for each type
+	my $c_cmd = "git show -p --stat";
+	my $t_cmd = "git ls-tree -r --full-tree";
+	my $b_cmd = "git show";
+	
+	# Create dump folders
+	create_dump_folders();
+	
+	# Dump files
+	objdumper('commit', $c_cmd, $d_folder . "/commit") if ($d_commit);
+	objdumper('tree', $t_cmd, $d_folder . "/tree") if ($d_tree);
+	objdumper('blob', $b_cmd, $d_folder . "/blob") if ($d_blob);
+}
+
+sub objdumper {
+	my $key = shift;
+	my $cmd = shift;
+	my $folder = shift;
+	
+	for my $sha (keys %{$objects{$key}}) {
+		my $out = `$cmd $sha`;
+		my $path = $folder . "/" . $sha;
+		my $ret = write_file($path, \$out);
+		unless ($ret) {
+			print STDERR "$exe: ",
+			"WARNING: dump failed for: $path\n";
+		}
+	}
 }
 
 main();
