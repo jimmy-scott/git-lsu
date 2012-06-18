@@ -62,7 +62,101 @@ Binary files will be displayed like this:
 	(binary data: 9252 bytes)
 
 To restore a file:
-	$ git show <SHA1> > file
+	$ git show <SHA-1> > file
+
+Dump all unreachable commit, tree, blob objects to a file:
+	$ git-lsu dump --input-file=list-unreachable.out dump-folder
+NOTE: commits include stats+patches, trees are recursive.
+
+Same as above, but only dump commit objects:
+	$ git-lsu dump --input-file=list-unreachable.out \
+		--commit dump-folder
+
+Same as above, but only dump tree objects:
+	$ git-lsu dump --input-file=list-unreachable.out \
+		--tree dump-folder
+
+Same as above, but only dump blob objects:
+	$ git-lsu dump --input-file=list-unreachable.out \
+		--blob dump-folder
+
+If you want to re-use (or screwup) a given dump folder:
+	$ git-lsu dump --input-file=list-unreachable.out \
+		--force dump-folder
+
+As you can see, there are a lot of options, and there is a lot of
+overlap, so it is up to you to decide how you want to find your lost
+changes.
+
+Note that when you checkout an unreachable commit (yes, you can do
+that), it will not show up as unreachable unless you use the --no-reflog
+switch when using the 'list' command.
+
+THIS IS WHY I RECOMMEND CREATING INPUT FILES !!! (gi^Hot it now?)
+
+
+Examples #1: Recover from dropping a wrong stash
+------------------------------------------------
+
+Create a list of unreachable objects:
+	$ git-lsu list > list-unreachable.out
+
+If you stash; you stash your index and your working (WIP) copy.
+
+This will show the commits in chronological order:
+	$ git-lsu commit --input-file=list-unreachable.out | less
+
+If you remember when you have created your stash, write down the SHA-1
+ID's of the 'index on <branch>' and 'WIP on <branch>' commits.
+
+You can now find the SHA-1 of the blob by using this command:
+	$ git-lsu commit --input-file=list-unreachable.out \
+		--dump-tree | less
+
+And restore the blob by using:
+	$ git show <SHA-1> > file
+
+Another way is checking out the commits and copy the files:
+	$ git checkout <index SHA-1>
+	$ cp ...
+	$ git checkout <WIP SHA-1>
+	$ cp ...
+
+
+Examples #2: Recover from git reset --hard HEAD^
+------------------------------------------------
+
+If you realized it in time and know the commit message:
+	$ git reflog
+
+And then using the commit ID, you can do this to undo:
+	$ git reset --hard <SHA-1>
+
+If you don't want to undo but copy some changes:
+	$ git checkout <SHA-1>
+
+In other cases, it might go faster creating a list:
+	$ git-lsu list --no-reflog > list-unreachable-noref.out
+
+Dump thes blobs:
+	$ git-lsu dump --input-file=list-unreachable-noref.out \
+		--blob dump-folder
+
+Locate your changes:
+	$ cd dump-folder/blob
+	$ grep <changes> *
+
+And if in doubt between several blobs, check the date of the commmit
+in which they show up by checking the output of this command:
+	$ git-lsu commit --input-file=list-unreachable-noref.out \
+		--dump-tree | less
+
+
+Example #3: ....
+----------------
+
+Please let me know in case I saved your day! Tell me what you did
+wrong, which steps you tried, and how you were able to recover, ...
 
 
 Some boring background about the tool and when to use it
@@ -108,4 +202,16 @@ you'll need to find the commit and tree object it belonged to first.
 
 It's possible to find something, just a bit too cumbersome.
 So if you ever tried this: this script might save you a lot of time.
+
+
+Footnote
+--------
+
+This tool was designed to make it easy to either inspect dangling or
+unreachable objects, or recover them. You are responsible for giving
+this tool the correct pass-through options to the git commands it is
+using. I am not planning to include all possible git commands in my
+source code, or even support using every single one of them. You can
+however try to convince me a certain option does not work well and why
+it would be useful to support it.
 
