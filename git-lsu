@@ -3,7 +3,7 @@
 ######
 # git-lsu, git-lsd: inspect unreachable or dangling objects
 #
-# version: 0.4 created on 18/06/2012 (DD/MM/YYYY)
+# version: 0.5 created on 01/07/2012 (DD/MM/YYYY)
 # source: http://pub.devbox.be
 ###
 #
@@ -67,6 +67,7 @@ my $c_dumptree = '';	# Dump tree for every commit
 my $d_commit = '';
 my $d_tree = '';
 my $d_blob = '';
+my $d_tag = '';
 my $d_force = '';
 my $d_folder = '';
 
@@ -74,7 +75,7 @@ my $d_folder = '';
 my @gitopts = ();
 
 # This structure is mostly for future use to support analyze mode
-my %objects = ( 'commit' => {}, 'tree' => {}, 'blob' => {} );
+my %objects = ( 'commit' => {}, 'tree' => {}, 'blob' => {}, 'tree' => {} );
 
 
 sub show_usage {
@@ -83,11 +84,12 @@ sub show_usage {
 	"usage: $exe [--help] [--version]\n",
 	"       $exe [list] [--input-file=<file>] [git-fsck options]\n",
 	"       $exe dump [--input-file=<file>] [--commit] [--tree] [--blob]\n",
-	"       $spc      [--force] <folder>\n",
+	"       $spc      [-tag] [--force] <folder>\n",
 	"       $exe commit [--input-file=<file>] [--no-newlines]\n",
 	"       $spc        [--show-tree] [--dump-tree] [git-show options]\n",
 	"       $exe tree [--input-file=<file>] [git-ls-tree options]\n",
 	"       $exe blob [--input-file=<file>]\n",
+	"       $exe tag [--input-file=<file>]\n",
 	"\n",
 	"options:\n",
 	"   --input-file=<file>    ",
@@ -100,6 +102,8 @@ sub show_usage {
 		"Dump tree objects (instead of everything)\n",
 	"   --blob                 ",
 		"Dump blob objects (instead of everything\n",
+	"   --tag                  ",
+		"Dump tag objects (instead of everything\n",
 	"   --force                ",
 		"Force using the supplied folder name\n",
 	"\n",
@@ -142,6 +146,8 @@ sub main {
 		show_trees();
 	} elsif ($command eq 'blob') {
 		show_blobs();
+	} elsif ($command eq 'tag') {
+		show_tags();
 	} elsif ($command eq 'dump') {
 		dump_objects();
 	} else {
@@ -163,7 +169,7 @@ sub parse_args {
 	my %alloptions;
 	
 	# List of all supported commands
-	my @commands = ('list', 'commit', 'tree', 'blob', 'dump');
+	my @commands = ('list', 'commit', 'tree', 'blob', 'dump', 'tag');
 	
 	# Catch these options for all commands
 	%alloptions = (
@@ -184,10 +190,12 @@ sub parse_args {
 			'commit'	=>	\$d_commit,
 			'tree'		=>	\$d_tree,
 			'blob'		=>	\$d_blob,
+			'tag'		=>	\$d_tag,
 			'force'		=>	\$d_force,
 		);
 	#} elsif ($command eq 'tree') {
 	#} elsif ($command eq 'blob') {
+	#} elsif ($command eq 'tag') {
 	#} else {
 	}
 	
@@ -217,6 +225,7 @@ sub parse_args {
 		# These options to not support pass_through
 		show_usage() if ($command eq 'blob');
 		show_usage() if ($command eq 'dump');
+		show_usage() if ($command eq 'tag');
 	}
 }
 
@@ -292,7 +301,7 @@ sub get_objects {
 	# Structure will look like this:
 	# %objects -> %type -> %sha1 -> %prop = 'value'
 	for my $line (split /\n/, $fsck) {
-		if ($line =~ /^(unreachable|dangling)\s+(commit|blob|tree)\s+([a-f0-9]+)$/) {
+		if ($line =~ /^(unreachable|dangling)\s+(commit|blob|tree|tag)\s+([a-f0-9]+)$/) {
 			my $state = $1; my $type = $2; my $sha = $3;
 			next if ($dangle && $state ne "dangling");
 			next if ((!$dangle) && $state ne "unreachable");
@@ -324,6 +333,10 @@ sub list_objects {
 	
 	for $sha (keys %{$objects{'blob'}}) {
 		print "$state blob $sha\n";
+	}
+	
+	for $sha (keys %{$objects{'tag'}}) {
+		print "$state tag $sha\n";
 	}
 }
 
@@ -427,6 +440,22 @@ sub show_blobs {
 	}
 }
 
+sub show_tags {
+	my $sha;
+	my $cmd = "git show --quiet";
+	
+	# Has no point AFAIK
+	#if (@gitopts) {
+	#	$cmd .= " " . join(' ', @gitopts);
+	#}
+	
+	for $sha (keys %{$objects{'tag'}}) {
+		print "tag ${sha}\n\n";
+		my $out = `$cmd $sha`;
+		print $out, "\n";
+	}
+}
+
 sub check_is_binary {
 	my $data_ref = shift;
 	
@@ -450,6 +479,7 @@ sub create_dump_folders {
 	push @folders, $d_folder . '/commit' if ($d_commit);
 	push @folders, $d_folder . '/tree' if ($d_tree);
 	push @folders, $d_folder . '/blob' if ($d_blob);
+	push @folders, $d_folder . '/tag' if ($d_tag);
 	
 	# Check and create each folder
 	for my $folder (@folders) {
@@ -481,22 +511,24 @@ sub create_dump_folders {
 
 sub dump_objects {
 	# Dump all if no type was specified
-	unless ($d_commit || $d_tree || $d_blob) {
-		$d_commit = $d_tree = $d_blob = 1;
+	unless ($d_commit || $d_tree || $d_blob || $d_tag) {
+		$d_commit = $d_tree = $d_blob = $d_tag = 1;
 	}
 	
 	# Dump commands for each type
 	my $c_cmd = "git show -p --stat";
-	my $t_cmd = "git ls-tree -r --full-tree";
+	my $tr_cmd = "git ls-tree -r --full-tree";
 	my $b_cmd = "git show";
+	my $tg_cmd = "git show --quiet";
 	
 	# Create dump folders
 	create_dump_folders();
 	
 	# Dump files
 	objdumper('commit', $c_cmd, $d_folder . "/commit") if ($d_commit);
-	objdumper('tree', $t_cmd, $d_folder . "/tree") if ($d_tree);
+	objdumper('tree', $tr_cmd, $d_folder . "/tree") if ($d_tree);
 	objdumper('blob', $b_cmd, $d_folder . "/blob") if ($d_blob);
+	objdumper('tag', $tg_cmd, $d_folder . "/tag") if ($d_tag);
 }
 
 sub objdumper {

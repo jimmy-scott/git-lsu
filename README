@@ -61,10 +61,13 @@ List unreachable blob objects:
 Binary files will be displayed like this:
 	(binary data: 9252 bytes)
 
+List unreachable tag objects:
+	$ git-lsu tag --input-file=list-unreachable.out
+
 To restore a file:
 	$ git show <SHA-1> > file
 
-Dump all unreachable commit, tree, blob objects to a file:
+Dump all unreachable commit, tree, blob, tag objects to a file:
 	$ git-lsu dump --input-file=list-unreachable.out dump-folder
 NOTE: commits include stats+patches, trees are recursive.
 
@@ -79,6 +82,10 @@ Same as above, but only dump tree objects:
 Same as above, but only dump blob objects:
 	$ git-lsu dump --input-file=list-unreachable.out \
 		--blob dump-folder
+
+Same as above, but only dump tag objects:
+	$ git-lsu dump --input-file=list-unreachable.out \
+		--tag dump-folder
 
 If you want to re-use (or screwup) a given dump folder:
 	$ git-lsu dump --input-file=list-unreachable.out \
